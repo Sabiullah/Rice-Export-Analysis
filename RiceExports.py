@@ -43,7 +43,7 @@ if SELECT == "Export Analysis":
     st.sidebar.write("Select a report:")
     report_choice = st.sidebar.radio(
         'Report',
-        ["Importer/Exporter Overview", "Geographical Analysis", "Product Analysis", "Financial Analysis", "Time-Series Analysis"]
+        ["Importer/Exporter Overview","Port of Arrival/Departure Overview", "Geographical Analysis", "Product Analysis", "Financial Analysis", "Time-Series Analysis"]
     )
 
     if report_choice == "Importer/Exporter Overview":
@@ -62,118 +62,297 @@ if SELECT == "Export Analysis":
             else:
                 selected_import_countries = st.multiselect("Select Importers:", sorted_countries)
 
-            # Filter data based on selected countries
-            filtered_import_data = ricedata[ricedata['IMPORTER COUNTRY'].isin(selected_import_countries)]
-            # Aggregate quantity by country
-            quantity_by_import_country = filtered_import_data.groupby('IMPORTER COUNTRY')[
-                'QTY IN KG'].sum().reset_index()
+            # Add a year filter for selecting specific years or all years
+            all_years = ricedata['ARRIVAL DATE'].dt.year.unique()
+            Select_All_Years = st.checkbox("Select All Years")
+
+            if Select_All_Years:
+                selected_years = all_years  # Select all years if checkbox is checked
+            else:
+                selected_years = st.multiselect("Select Years:", list(all_years))
+
+            # Add a field to specify the number of top importers to display
+            top_n_importers = st.number_input("Top N Importers", min_value=1, value=5)
+
+            # Filter data based on selected countries and years
+            filtered_import_data = ricedata[
+                (ricedata['IMPORTER COUNTRY'].isin(selected_import_countries)) &
+                (ricedata['ARRIVAL DATE'].dt.year.isin(selected_years))
+                ]
+
+            # Aggregate quantity by importer country
+            quantity_by_import_country = filtered_import_data.groupby('IMPORTER COUNTRY').agg({
+                'QTY IN KG': 'sum',
+                'IMPORT VALUE FOB': 'sum',
+                'CURRENCY': 'first'
+            }).reset_index()
+
+            # Select top N importers based on quantity
+            top_importers = quantity_by_import_country.nlargest(top_n_importers, 'QTY IN KG')['IMPORTER COUNTRY']
+
+            # Filter the data for top N importers
+            filtered_import_data = filtered_import_data[filtered_import_data['IMPORTER COUNTRY'].isin(top_importers)]
+
+            # Aggregate quantity by country for the top importers
+            quantity_by_importer = filtered_import_data.groupby('IMPORTER COUNTRY').agg({
+                'QTY IN KG': 'sum',
+                'IMPORT VALUE FOB': 'sum',
+                'CURRENCY': 'first'
+            }).reset_index()
 
             # Create a line chart using Plotly Express for Importers
-            fig_import = px.line(quantity_by_import_country, x='IMPORTER COUNTRY', y='QTY IN KG',
+            fig_import = px.line(quantity_by_importer, x='IMPORTER COUNTRY', y='QTY IN KG',
                                  labels={'IMPORTER COUNTRY': 'Country', 'QTY IN KG': 'Quantity'})
             st.plotly_chart(fig_import)
 
-            # Check if Importer Country selection is not empty
-            if selected_import_countries is not None and np.any(selected_import_countries):
-                # Filter Importer Names based on selected countries
-                importer_names = filtered_import_data['IMPORTER NAME'].unique()
-                sorted_importer_names = list(sorted(importer_names))
+            # Create a table showing Importer Country, Qty in Kg, IMPORT VALUE FOB, and CURRENCY
+            st.write("### Table - Importer Details")
+            st.write(
+                quantity_by_importer.rename(columns={'IMPORTER COUNTRY': 'Importer Country', 'QTY IN KG': 'Qty in Kg',
+                                                     'IMPORT VALUE FOB': 'Import Value FOB', 'CURRENCY': 'Currency'}))
 
-                # Add a "Select All" option to the multiselect dropdown for Importer Names
-                Select_Import_Name = st.checkbox("Select All Importer Names")
 
-                if Select_Import_Name:
-                    selected_importer_names = importer_names  # Select all names if checkbox is checked
-                else:
-                    selected_importer_names = st.multiselect("Select Importer Names:", sorted_importer_names)
 
-                # Filter data based on selected importer names
-                filtered_importer_names_data = filtered_import_data[
-                    filtered_import_data['IMPORTER NAME'].isin(selected_importer_names)
-                ]
-                # Aggregate quantity by importer name
-                quantity_by_importer_name = filtered_importer_names_data.groupby('IMPORTER NAME')[
-                    'QTY IN KG'].sum().reset_index()
-
-                # Create a line chart using Plotly Express for Importer Names
-                fig_importer_name = px.line(quantity_by_importer_name, x='IMPORTER NAME', y='QTY IN KG',
-                                            labels={'IMPORTER NAME': 'Importer Name', 'QTY IN KG': 'Quantity'})
-                st.plotly_chart(fig_importer_name)
 
 
 
 
         elif tab_choice == "Exporter":
+
             ExporterCountry = ricedata['EXPORTER NAME'].unique()
 
             # Add a "Select All" option to the multiselect dropdown
+
             Select_Export_Country = st.checkbox("Select All Exporter Names")
 
             if Select_Export_Country:
+
                 selected_export_countries = ExporterCountry  # Select all countries if checkbox is checked
+
             else:
+
                 selected_export_countries = st.multiselect("Select Exporters:", ExporterCountry)
 
-            # Filter data based on selected countries
-            filtered_export_data = ricedata[ricedata['EXPORTER NAME'].isin(selected_export_countries)]
-            # Aggregate quantity by country for the entire dataset
-            quantity_by_country_all = ricedata.groupby('EXPORTER NAME')['QTY IN KG'].sum().reset_index()
-            # Aggregate quantity by country
-            quantity_by_export_country = filtered_export_data.groupby('EXPORTER NAME')['QTY IN KG'].sum().reset_index()
+            # Add a year filter for selecting specific years or all years
 
-            # Create a line chart using Plotly Express for Exporters
-            fig_export = px.line(quantity_by_export_country, x='EXPORTER NAME', y='QTY IN KG',
-                                 labels={'EXPORTER NAME': 'Country', 'QTY IN KG': 'Quantity'})
-            st.plotly_chart(fig_export)
+            all_years = ricedata['ARRIVAL DATE'].dt.year.unique()
+
+            Select_All_Years_Export = st.checkbox("Select All Years")
+
+            if Select_All_Years_Export:
+
+                selected_years_export = all_years  # Select all years if checkbox is checked
+
+            else:
+
+                selected_years_export = st.multiselect("Select Years:", list(all_years))
+
+            # Filter data based on selected countries and years for overall export quantity
+
+            filtered_export_data = ricedata[
+
+                (ricedata['EXPORTER NAME'].isin(selected_export_countries)) &
+
+                (ricedata['ARRIVAL DATE'].dt.year.isin(selected_years_export))
+
+                ]
+
+            # Aggregate quantity by country for selected exporters
+
+            quantity_by_export_country = filtered_export_data.groupby('EXPORTER NAME').agg({
+
+                'QTY IN KG': 'sum',
+
+                'IMPORT VALUE FOB': 'sum',
+
+                'CURRENCY': 'first'
+
+            }).reset_index()
 
             # Allow selection of top N exporters based on quantity
-            top_n_exporters = st.number_input("Select top N exporters", min_value=1, max_value=len(quantity_by_country_all),
+
+            top_n_exporters = st.number_input("Select top N exporters", min_value=1,
+
+                                              max_value=len(quantity_by_export_country),
+
                                               value=3)
 
-            # Get top N exporters by quantity
-            top_exporters = quantity_by_country_all.nlargest(top_n_exporters, 'QTY IN KG')
+            # Get top N exporters by quantity for the selected years
 
-            # Create a line chart using Plotly Express for top exporters
+            top_exporters = quantity_by_export_country.nlargest(top_n_exporters, 'QTY IN KG')
+
+            # Create a table showing EXPORTER NAME, QTY IN KG, IMPORT VALUE FOB, and CURRENCY for top N exporters
+
+            st.write("### Table - Top N Exporters")
+
+            st.write(top_exporters.rename(columns={'EXPORTER NAME': 'Exporter Name', 'QTY IN KG': 'Qty in Kg',
+
+                                                   'IMPORT VALUE FOB': 'Import Value FOB', 'CURRENCY': 'Currency'}))
+            # Create a line chart using Plotly Express for top N exporters
             fig_top_exporters = px.line(top_exporters, x='EXPORTER NAME', y='QTY IN KG',
-                                        labels={'EXPORTER NAME': 'Country', 'QTY IN KG': 'Quantity'})
+                                        labels={'EXPORTER NAME': 'Exporter Name', 'QTY IN KG': 'Quantity'})
             st.plotly_chart(fig_top_exporters)
 
 
-#******************************************************************************************************
-#******************************************************************************************************
 
-    if report_choice == "Geographical Analysis":
+    #******************************************************************************************************
+#******************************************************************************************************
+    elif report_choice == "Port of Arrival/Departure Overview":
+        # Creating tabs for Port of Arrival and Port of Departure
+        tab_choice = st.sidebar.radio('Select', ["Port of Arrival", "Port of Departure"])
+
+        if tab_choice == "Port of Arrival":
+            ArrivalPorts = ricedata['PORT OF ARRIVAL'].unique()
+            sorted_arrival_ports = list(sorted(ArrivalPorts))
+
+            # Add a "Select All" option to the multiselect dropdown for Arrival Ports
+            Select_Arrival_Port = st.checkbox("Select All Arrival Ports")
+
+            if Select_Arrival_Port:
+                selected_arrival_ports = ArrivalPorts  # Select all ports if checkbox is checked
+            else:
+                selected_arrival_ports = st.multiselect("Select Arrival Ports:", sorted_arrival_ports)
+
+            # Add a year filter for selecting specific years or all years
+            all_years_arrival = ricedata['ARRIVAL DATE'].dt.year.unique()
+            Select_All_Years_Arrival = st.checkbox("Select All Years for Arrival")
+
+            if Select_All_Years_Arrival:
+                selected_years_arrival = all_years_arrival  # Select all years if checkbox is checked
+            else:
+                selected_years_arrival = st.multiselect("Select Years for Arrival:", list(all_years_arrival))
+
+            # Add a field to specify the number of top arrival ports to display
+            top_n_arrival_ports = st.number_input("Top N Arrival Ports", min_value=1, value=5)
+
+            # Filter data based on selected ports of arrival and years
+            filtered_arrival_data = ricedata[
+                (ricedata['PORT OF ARRIVAL'].isin(selected_arrival_ports)) &
+                (ricedata['ARRIVAL DATE'].dt.year.isin(selected_years_arrival))
+                ]
+
+            # Aggregate quantity by port of arrival
+            quantity_by_arrival_port = filtered_arrival_data.groupby('PORT OF ARRIVAL')['QTY IN KG'].sum().reset_index()
+
+            # Select top N arrival ports based on quantity
+            top_arrival_ports = quantity_by_arrival_port.nlargest(top_n_arrival_ports, 'QTY IN KG')['PORT OF ARRIVAL']
+
+            # Filter the data for top N arrival ports
+            filtered_arrival_data = filtered_arrival_data[
+                filtered_arrival_data['PORT OF ARRIVAL'].isin(top_arrival_ports)]
+
+            # Aggregate quantity by port of arrival for the top arrival ports
+            quantity_by_top_arrival_ports = filtered_arrival_data.groupby('PORT OF ARRIVAL')[
+                'QTY IN KG'].sum().reset_index()
+
+            # Create a line chart using Plotly Express for Ports of Arrival
+            fig_arrival = px.line(quantity_by_top_arrival_ports, x='PORT OF ARRIVAL', y='QTY IN KG',
+                                  labels={'PORT OF ARRIVAL': 'Port of Arrival', 'QTY IN KG': 'Quantity'})
+            st.plotly_chart(fig_arrival)
+
+        elif tab_choice == "Port of Departure":
+            DeparturePorts = ricedata['PORT OF DEPARTURE'].unique()
+
+            # Add a "Select All" option to the multiselect dropdown for Departure Ports
+            Select_Departure_Port = st.checkbox("Select All Departure Ports")
+
+            if Select_Departure_Port:
+                selected_departure_ports = DeparturePorts  # Select all ports if checkbox is checked
+            else:
+                selected_departure_ports = st.multiselect("Select Departure Ports:", DeparturePorts)
+
+            # Add a year filter for selecting specific years or all years for Departure Ports
+            all_years_departure = ricedata['ARRIVAL DATE'].dt.year.unique()
+            Select_All_Years_Departure = st.checkbox("Select All Years for Departure")
+
+            if Select_All_Years_Departure:
+                selected_years_departure = all_years_departure  # Select all years if checkbox is checked
+            else:
+                selected_years_departure = st.multiselect("Select Years for Departure:", list(all_years_departure))
+
+            # Add a field to specify the number of top departure ports to display
+            top_n_departure_ports = st.number_input("Top N Departure Ports", min_value=1, value=5)
+
+            # Filter data based on selected ports of departure and years
+            filtered_departure_data = ricedata[
+                (ricedata['PORT OF DEPARTURE'].isin(selected_departure_ports)) &
+                (ricedata['ARRIVAL DATE'].dt.year.isin(selected_years_departure))
+                ]
+
+            # Aggregate quantity by port of departure
+            quantity_by_departure_port = filtered_departure_data.groupby('PORT OF DEPARTURE')[
+                'QTY IN KG'].sum().reset_index()
+
+            # Select top N departure ports based on quantity
+            top_departure_ports = quantity_by_departure_port.nlargest(top_n_departure_ports, 'QTY IN KG')[
+                'PORT OF DEPARTURE']
+
+            # Filter the data for top N departure ports
+            filtered_departure_data = filtered_departure_data[
+                filtered_departure_data['PORT OF DEPARTURE'].isin(top_departure_ports)]
+
+            # Aggregate quantity by port of departure for the top departure ports
+            quantity_by_top_departure_ports = filtered_departure_data.groupby('PORT OF DEPARTURE')[
+                'QTY IN KG'].sum().reset_index()
+
+            # Create a line chart using Plotly Express for Ports of Departure
+            fig_departure = px.line(quantity_by_top_departure_ports, x='PORT OF DEPARTURE', y='QTY IN KG',
+                                    labels={'PORT OF DEPARTURE': 'Port of Departure', 'QTY IN KG': 'Quantity'})
+            st.plotly_chart(fig_departure)
+
+    #*********************************************************************************************************
+#*********************************************************************************************************
+    elif report_choice == "Geographical Analysis":
         st.write("### Geographical Analysis")
 
-        # Add filtering options
+        # Add filtering options for countries
         filter_options = st.radio("Filter by:", ("All Countries", "Select Multiple Countries", "Top N Countries"))
 
         if filter_options == "All Countries":
-            quantity_by_importer_country = ricedata.groupby('IMPORTER COUNTRY')['QTY IN KG'].sum().reset_index()
+            filtered_data = ricedata.copy()
         elif filter_options == "Select Multiple Countries":
             selected_countries = st.multiselect("Select Countries:", ricedata['IMPORTER COUNTRY'].unique())
-            quantity_by_importer_country = \
-            ricedata[ricedata['IMPORTER COUNTRY'].isin(selected_countries)].groupby('IMPORTER COUNTRY')[
-                'QTY IN KG'].sum().reset_index()
+            filtered_data = ricedata[ricedata['IMPORTER COUNTRY'].isin(selected_countries)]
         else:  # Top N Countries
             top_n = st.number_input("Select top N countries", min_value=1,
                                     max_value=len(ricedata['IMPORTER COUNTRY'].unique()), value=5)
-            quantity_by_importer_country = ricedata.groupby('IMPORTER COUNTRY')['QTY IN KG'].sum().nlargest(
-                top_n).reset_index()
+            top_countries = ricedata.groupby('IMPORTER COUNTRY')['QTY IN KG'].sum().nlargest(top_n).index
+            filtered_data = ricedata[ricedata['IMPORTER COUNTRY'].isin(top_countries)]
+
+        # Filter by year
+        st.write("### Filter by Year")
+        all_years = ricedata['ARRIVAL DATE'].dt.year.unique()
+        selected_year = st.selectbox("Select Year:", ["All Years"] + list(all_years))
+
+        if selected_year != "All Years":
+            filtered_data = filtered_data[filtered_data['ARRIVAL DATE'].dt.year == selected_year]
+
+        # Aggregate quantities by country including IMPORT VALUE FOB and CURRENCY
+        aggregated_data = round(filtered_data.groupby('IMPORTER COUNTRY').agg({
+            'QTY IN KG': 'sum',
+            'IMPORT VALUE FOB': 'sum',
+            'CURRENCY': 'first'
+        }).reset_index(), 0)
+
+        # Sort aggregated data by QTY IN KG in descending order
+        aggregated_data = aggregated_data.sort_values(by='QTY IN KG', ascending=False)
 
         # Create a choropleth map using Plotly Express
-        fig = px.choropleth(quantity_by_importer_country,
+        st.write("### Choropleth Map - Quantity by Country")
+        fig = px.choropleth(aggregated_data,
                             locations='IMPORTER COUNTRY',
                             locationmode="country names",
                             color='QTY IN KG',
                             hover_name='IMPORTER COUNTRY',
                             color_continuous_scale='YlGnBu',
                             labels={'IMPORTER COUNTRY': 'Country', 'QTY IN KG': 'Quantity'})
-
-        # Display the map using Streamlit
         st.plotly_chart(fig)
 
-#*********************************************************************************************
+        # Create a table showing Cumulative Quantity, Import Value FOB, and Currency by Country
+        st.write("### Table - Cumulative Quantity, Import Value FOB, and Currency by Country (Sorted by Quantity)")
+        st.write(aggregated_data.rename(columns={'IMPORTER COUNTRY': 'Country'}))
+
+    #*********************************************************************************************
 #*********************************************************************************************
 
     if report_choice == "Product Analysis":
@@ -186,8 +365,8 @@ if SELECT == "Export Analysis":
 
             if filter_options == "All Import Countries":
                 # Group by 'IMPORTER COUNTRY' and 'HS CODE DESCRIPTION' and sum the quantities
-                product_analysis = ricedata.groupby(['IMPORTER COUNTRY', 'HS CODE DESCRIPTION'])[
-                    'QTY IN KG'].sum().reset_index()
+                product_analysis = round(ricedata.groupby(['IMPORTER COUNTRY', 'HS CODE DESCRIPTION'])[
+                    'QTY IN KG'].sum().reset_index(),0)
                 st.write(
                     "### Import Details for All Import Countries based on HS CODE DESCRIPTION and Quantity (in KG)")
                 st.write(product_analysis)
@@ -210,7 +389,7 @@ if SELECT == "Export Analysis":
 
             if product_option == "All Products":
                 # Group by 'HS CODE DESCRIPTION' and sum the quantities
-                product_analysis = ricedata.groupby('HS CODE DESCRIPTION')['QTY IN KG'].sum().reset_index()
+                product_analysis = round(ricedata.groupby('HS CODE DESCRIPTION')['QTY IN KG'].sum().reset_index(),0)
                 st.write("### Import Details for All Products based on HS CODE DESCRIPTION and Quantity (in KG)")
                 st.write(product_analysis)
             else:  # Top N Products
@@ -218,8 +397,8 @@ if SELECT == "Export Analysis":
                                                  max_value=len(ricedata['HS CODE DESCRIPTION'].unique()), value=5)
 
                 # Group by 'HS CODE DESCRIPTION' and sum the quantities
-                product_analysis = ricedata.groupby('HS CODE DESCRIPTION')['QTY IN KG'].sum().nlargest(
-                    top_n_products).reset_index()
+                product_analysis = round(ricedata.groupby('HS CODE DESCRIPTION')['QTY IN KG'].sum().nlargest(
+                    top_n_products).reset_index(),0)
                 st.write(
                     f"### Import Details for Top {top_n_products} Products based on HS CODE DESCRIPTION and Quantity (in KG)")
                 st.write(product_analysis)
